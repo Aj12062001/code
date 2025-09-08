@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Silent Key - Secure QR Encryption</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="hero">
+    <img src="/static/logo.png" alt="Silent Key Logo" class="logo">
+    <h1>Silent Key</h1>
+    <p class="subtitle">Share secrets securely with one-time QR codes and passphrases</p>
+  </div>
+
+  <div class="container">
+    <!-- Encrypt Section -->
+    <div class="section card">
+      <h2>Encrypt Message</h2>
+      <form id="encryptForm">
+        <textarea id="text" placeholder="Enter your secret message..." required></textarea>
+        <input type="password" id="passphrase" placeholder="Passphrase (for encryption)" required>
+        <label class="expiry-label">Expiry (seconds): <input type="number" id="expiry" value="60" min="1" required></label>
+        <button type="submit" class="btn-primary">Generate QR Code</button>
+      </form>
+      <div id="qrResult" class="qr-result"></div>
+    </div>
+
+    <!-- Decrypt Section -->
+    <div class="section card">
+      <h2>Decrypt Message</h2>
+      <form id="decryptForm">
+        <input type="file" id="qrfile" accept="image/*" required>
+        <input type="password" id="decryptPassphrase" placeholder="Passphrase (for decryption)" required>
+        <button type="submit" class="btn-secondary">Decrypt QR Code</button>
+      </form>
+      <div id="decryptedResult" class="decrypted-result"></div>
+      <div id="timer"></div>
+    </div>
+  </div>
+
+  <footer>
+    <p>Made with ❤️ for secure sharing</p>
+  </footer>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>
