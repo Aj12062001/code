@@ -1,150 +1,136 @@
-print("Starting Flask server...")
-from flask import Flask, request, send_file, jsonify, send_from_directory
-import io
-import base64
+from flask import Flask, request, jsonify, send_file, send_from_directory
 import os
-import qrcode
+import base64
+import json
 import time
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import padding, hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+import qrcode
 import cv2
 import numpy as np
 
 app = Flask(__name__, static_folder="static")
 
-# --------------------------
-# Routes
-# --------------------------
-@app.route("/")
-def root():
-    return send_from_directory(app.static_folder, "index.html")
+SAVE_DIR = "saved_qr_codes"
+os.makedirs(SAVE_DIR, exist_ok=True)
 
-@app.route("/static/<path:filename>")
-def static_files(filename):
-    return send_from_directory(app.static_folder, filename)
+# Dictionary to track QR usage (first decryption start time)
+qr_usage = {}  # { qr_id: first_decryption_time }
 
-# --------------------------
-# Crypto functions
-# --------------------------
-def derive_key(passphrase, salt, iterations=100_000, length=32):
+
+def derive_key(passphrase: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
-        length=length,
+        length=32,
         salt=salt,
-        iterations=iterations,
-        backend=default_backend(),
+        iterations=100000,
+        backend=default_backend()
     )
     return kdf.derive(passphrase.encode())
 
-def encrypt_data(data, key):
-    padder = padding.PKCS7(128).padder()
-    padded_data = padder.update(data.encode()) + padder.finalize()
+
+def encrypt_message(message: str, passphrase: str, expiry: int) -> str:
+    salt = os.urandom(16)
     iv = os.urandom(16)
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    key = derive_key(passphrase, salt)
+
+    cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
     encryptor = cipher.encryptor()
-    ct = encryptor.update(padded_data) + encryptor.finalize()
-    return iv + ct  # prepend IV
+    ciphertext = encryptor.update(message.encode()) + encryptor.finalize()
 
-def decrypt_data(enc_data, key):
-    iv = enc_data[:16]
-    ct = enc_data[16:]
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-    decryptor = cipher.decryptor()
-    padded_data = decryptor.update(ct) + decryptor.finalize()
-    unpadder = padding.PKCS7(128).unpadder()
-    data = unpadder.update(padded_data) + unpadder.finalize()
-    return data.decode()
+    payload = {
+        "salt": base64.b64encode(salt).decode(),
+        "iv": base64.b64encode(iv).decode(),
+        "ciphertext": base64.b64encode(ciphertext).decode(),
+        "expiry": expiry,
+    }
+    return json.dumps(payload)
 
-# --------------------------
-# QR Encrypt Endpoint
-# --------------------------
+
+def decrypt_message(payload: dict, passphrase: str, qr_id: str):
+    try:
+        salt = base64.b64decode(payload["salt"])
+        iv = base64.b64decode(payload["iv"])
+        ciphertext = base64.b64decode(payload["ciphertext"])
+        expiry = int(payload["expiry"])
+    except Exception:
+        return {"error": "Invalid QR data"}
+
+    now = int(time.time())
+    if qr_id in qr_usage:
+        first_use = qr_usage[qr_id]
+        elapsed = now - first_use
+        if elapsed > expiry:
+            return {"error": "QR code expired"}
+        remaining = expiry - elapsed
+    else:
+        qr_usage[qr_id] = now
+        remaining = expiry
+
+    try:
+        key = derive_key(passphrase, salt)
+        cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(ciphertext) + decryptor.finalize()
+        return {"message": decrypted.decode(), "remaining": remaining}
+    except Exception:
+        return {"error": "Wrong passphrase or corrupted QR"}
+
+
+# Serve main page from static
+@app.route("/")
+def index():
+    return send_from_directory(app.static_folder, "index.html")
+
+
 @app.route("/encrypt", methods=["POST"])
 def encrypt():
     text = request.form["text"]
+    expiry = int(request.form["expiry"])
     passphrase = request.form["passphrase"]
-    expiry = int(request.form["expiry"])  # seconds
-    expiry_timestamp = int(time.time()) + expiry
 
-    salt = os.urandom(16)
-    key = derive_key(passphrase, salt)
-    encrypted = encrypt_data(text, key)
+    payload = encrypt_message(text, passphrase, expiry)
 
-    b64_salt = base64.urlsafe_b64encode(salt).decode()
-    b64_encrypted = base64.urlsafe_b64encode(encrypted).decode()
+    qr_id = base64.urlsafe_b64encode(os.urandom(6)).decode()
+    img = qrcode.make(payload)
+    file_path = os.path.join(SAVE_DIR, f"{qr_id}.png")
+    img.save(file_path)
 
-    payload = f"salt:{b64_salt}\ndata:{b64_encrypted}\nexp:{expiry_timestamp}"
+    return send_file(file_path, mimetype="image/png")
 
-    qr = qrcode.QRCode(version=1, box_size=10, border=4)
-    qr.add_data(payload)
-    qr.make(fit=True)
-    img = qr.make_image(fill="black", back_color="white")
 
-    # Save to memory
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-
-    # Save to folder "saved_qr_codes"
-    os.makedirs("saved_qr_codes", exist_ok=True)
-    filename = f"saved_qr_codes/qr_{int(time.time())}.png"
-    img.save(filename)
-
-    return send_file(buf, mimetype="image/png")
-
-# --------------------------
-# QR Decrypt Endpoint
-# --------------------------
 @app.route("/decrypt", methods=["POST"])
 def decrypt():
-    file = request.files["qrfile"]
+    if "qrfile" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    qrfile = request.files["qrfile"].read()
     passphrase = request.form["passphrase"]
-    if not file:
-        return jsonify({"error": "No file provided"}), 400
 
-    file_bytes = file.read()
-    np_arr = np.frombuffer(file_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    if img is None:
-        return jsonify({"error": "Could not decode image"}), 400
+    np_img = np.frombuffer(qrfile, np.uint8)
+    img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
 
-    # Decode QR using OpenCV
     detector = cv2.QRCodeDetector()
-    data, points, _ = detector.detectAndDecode(img)
-    if not data:
-        return jsonify({"error": "No QR code found"}), 400
+    data_str, points, _ = detector.detectAndDecode(img)
 
-    # Parse QR payload
-    qr_data = {}
-    for line in data.splitlines():
-        line = line.strip()
-        if line.startswith("salt:"):
-            qr_data["salt"] = line[5:]
-        elif line.startswith("data:"):
-            qr_data["data"] = line[5:]
-        elif line.startswith("exp:"):
-            qr_data["exp"] = line[4:]
-
-    if not all(k in qr_data for k in ["salt", "data", "exp"]):
-        return jsonify({"error": "Invalid QR code format"}), 400
+    if not data_str:
+        return jsonify({"error": "No QR code detected"}), 400
 
     try:
-        salt = base64.urlsafe_b64decode(qr_data["salt"])
-        encrypted = base64.urlsafe_b64decode(qr_data["data"])
-        expiry = int(qr_data["exp"])
-        now = int(time.time())
+        payload = json.loads(data_str)
+    except Exception:
+        return jsonify({"error": "Invalid QR payload"}), 400
 
-        if now > expiry:
-            return jsonify({"error": "QR code expired"}), 400
+    qr_id = base64.urlsafe_b64encode(
+        (payload["salt"] + payload["iv"] + payload["ciphertext"]).encode()
+    ).decode()[:12]
 
-        key = derive_key(passphrase, salt)
-        decrypted = decrypt_data(encrypted, key)
+    result = decrypt_message(payload, passphrase, qr_id)
+    return jsonify(result)
 
-        remaining = expiry - now
-        return jsonify({"message": decrypted, "remaining": remaining})
 
-    except Exception as e:
-        return jsonify({"error": f"Decryption failed: {str(e)}"}), 400
 if __name__ == "__main__":
+    print("Starting Flask server...")
     app.run(debug=True)
