@@ -1,43 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Silent Key - Secure QR Encryption</title>
-<link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <title>Silent Key</title>
+  <script src="script.js" defer></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    .container {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      margin: 15px;
+      width: 400px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px;
+      background: #2980b9;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1f6391;
+    }
+    #qrResult {
+      margin-top: 15px;
+      text-align: center;
+    }
+    #decrypted {
+      margin-top: 15px;
+      font-weight: bold;
+      color: #27ae60;
+    }
+  </style>
 </head>
 <body>
-<div class="hero">
-<img src="/static/logo.png" alt="Logo" class="logo">
-<h1>Silent Key</h1>
-<p class="subtitle">Share secrets securely via QR codes</p>
-</div>
+  <h1>🔐 Silent Key</h1>
 
-<div class="container">
-<div class="section card">
-<h2>Encrypt Message</h2>
-<form id="encryptForm">
-<textarea id="text" placeholder="Enter your secret message..." required></textarea>
-<input type="password" id="passphrase" placeholder="Passphrase" required>
-<label class="expiry-label">Expiry (seconds for countdown after first decryption):
-<input type="number" id="expiry" value="60" min="1" required></label>
-<button type="submit" class="btn-primary">Generate QR Code</button>
-</form>
-<div id="qrResult" class="qr-result"></div>
-</div>
+  <div class="container">
+    <h2>Encrypt Message</h2>
+    <label>Message:</label>
+    <input type="text" id="text" />
 
-<div class="section card">
-<h2>Decrypt Message</h2>
-<form id="decryptForm">
-<input type="file" id="qrfile" accept="image/*" required>
-<input type="password" id="decryptPassphrase" placeholder="Passphrase" required>
-<div id="timer"></div>
-<button type="submit" class="btn-secondary">Decrypt QR Code</button>
-</form>
-<div id="decryptedResult" class="decrypted-result"></div>
-</div>
-</div>
+    <label>Passphrase:</label>
+    <input type="password" id="passphrase" />
 
-<script src="/static/script.js"></script>
+    <label>Expiry (seconds):</label>
+    <input type="number" id="expiry" value="60" />
+
+    <label>Mode:</label>
+    <select id="mode">
+      <option value="normal">Normal</option>
+      <option value="one-time">One-time</option>
+    </select>
+
+    <button onclick="encrypt()">Encrypt</button>
+    <div id="qrResult"></div>
+  </div>
+
+  <div class="container">
+    <h2>Decrypt Message</h2>
+    <label>Upload QR:</label>
+    <input type="file" id="qrfile" />
+
+    <label>Passphrase:</label>
+    <input type="password" id="decryptPass" />
+
+    <button onclick="decrypt()">Decrypt</button>
+    <div id="decrypted"></div>
+  </div>
 </body>
 </html>
