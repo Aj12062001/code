@@ -3,7 +3,6 @@ import os
 import base64
 import json
 import time
-import shutil
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -17,8 +16,8 @@ app = Flask(__name__, static_folder="static")
 SAVE_DIR = "saved_qr_codes"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-# Track QR usage: { qr_id: { "first_use": timestamp, "mode": "normal"/"one-time", "expiry": int, "file": str } }
-qr_usage = {}
+# Dictionary to track QR usage (first decryption start time)
+qr_usage = {}  # { qr_id: first_decryption_time }
 
 
 def derive_key(passphrase: str, salt: bytes) -> bytes:
@@ -32,7 +31,7 @@ def derive_key(passphrase: str, salt: bytes) -> bytes:
     return kdf.derive(passphrase.encode())
 
 
-def encrypt_message(message: str, passphrase: str, expiry: int, mode: str) -> str:
+def encrypt_message(message: str, passphrase: str, expiry: int) -> str:
     salt = os.urandom(16)
     iv = os.urandom(16)
     key = derive_key(passphrase, salt)
@@ -46,7 +45,6 @@ def encrypt_message(message: str, passphrase: str, expiry: int, mode: str) -> st
         "iv": base64.b64encode(iv).decode(),
         "ciphertext": base64.b64encode(ciphertext).decode(),
         "expiry": expiry,
-        "mode": mode
     }
     return json.dumps(payload)
 
@@ -57,58 +55,31 @@ def decrypt_message(payload: dict, passphrase: str, qr_id: str):
         iv = base64.b64decode(payload["iv"])
         ciphertext = base64.b64decode(payload["ciphertext"])
         expiry = int(payload["expiry"])
-        mode = payload.get("mode", "normal")
     except Exception:
         return {"error": "Invalid QR data"}
 
     now = int(time.time())
-
-    # If first use
-    if qr_id not in qr_usage:
-        qr_usage[qr_id] = {
-            "first_use": now,
-            "mode": mode,
-            "expiry": expiry,
-            "file": None
-        }
-
-    record = qr_usage[qr_id]
-
-    # Handle modes
-    if mode == "one-time":
-        if record.get("used"):
-            return {"error": "QR code already used (one-time mode)"}
-        record["used"] = True
-        # Auto-delete QR immediately
-        if record["file"] and os.path.exists(record["file"]):
-            os.remove(record["file"])
-        return try_decrypt(salt, iv, ciphertext, passphrase)
-
-    elif mode == "normal":
-        elapsed = now - record["first_use"]
+    if qr_id in qr_usage:
+        first_use = qr_usage[qr_id]
+        elapsed = now - first_use
         if elapsed > expiry:
-            # Auto-delete expired QR
-            if record["file"] and os.path.exists(record["file"]):
-                os.remove(record["file"])
             return {"error": "QR code expired"}
         remaining = expiry - elapsed
-        result = try_decrypt(salt, iv, ciphertext, passphrase)
-        result["remaining"] = remaining
-        return result
+    else:
+        qr_usage[qr_id] = now
+        remaining = expiry
 
-
-def try_decrypt(salt, iv, ciphertext, passphrase):
     try:
         key = derive_key(passphrase, salt)
         cipher = Cipher(algorithms.AES(key), modes.CFB(iv), backend=default_backend())
         decryptor = cipher.decryptor()
         decrypted = decryptor.update(ciphertext) + decryptor.finalize()
-        return {"message": decrypted.decode()}
+        return {"message": decrypted.decode(), "remaining": remaining}
     except Exception:
         return {"error": "Wrong passphrase or corrupted QR"}
 
 
-# Serve main page
+# Serve main page from static
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -119,17 +90,13 @@ def encrypt():
     text = request.form["text"]
     expiry = int(request.form["expiry"])
     passphrase = request.form["passphrase"]
-    mode = request.form.get("mode", "normal")  # normal / one-time
 
-    payload = encrypt_message(text, passphrase, expiry, mode)
+    payload = encrypt_message(text, passphrase, expiry)
 
     qr_id = base64.urlsafe_b64encode(os.urandom(6)).decode()
     img = qrcode.make(payload)
     file_path = os.path.join(SAVE_DIR, f"{qr_id}.png")
     img.save(file_path)
-
-    # Track file path for cleanup
-    qr_usage[qr_id] = {"file": file_path, "mode": mode, "expiry": expiry, "first_use": None}
 
     return send_file(file_path, mimetype="image/png")
 
