@@ -3,10 +3,12 @@ import json
 import base64
 import qrcode
 import cv2
+
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256
+
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
@@ -15,25 +17,36 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 SAVE_DIR = "saved_qr_codes"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-# --- RSA Key Generation ---
-def generate_rsa_key_pair():
-    key = RSA.generate(2048)
-    private_pem = key.export_key().decode()
-    public_pem = key.publickey().export_key().decode()
+# --- Option 1: Load RSA Key Pair by Filename ---
+def load_rsa_keys_by_name():
+    pub_filename = input("Enter PUBLIC key filename (e.g. rit_public.pem): ").strip()
+    priv_filename = input("Enter PRIVATE key filename (e.g. ajinjose_private.pem): ").strip()
 
-    with open("host_private.pem", "w") as f:
-        f.write(private_pem)
+    try:
+        with open(pub_filename, "r") as f:
+            public_pem = f.read()
+        with open(priv_filename, "r") as f:
+            private_pem = f.read()
+
+        RSA.import_key(public_pem)
+        RSA.import_key(private_pem)
+    except Exception:
+        print("❌ Failed to load or validate RSA keys. Check filenames and formats.")
+        return
+
     with open("host_public.pem", "w") as f:
         f.write(public_pem)
+    with open("host_private.pem", "w") as f:
+        f.write(private_pem)
 
-    print("\n✅ RSA Key Pair Generated and Saved:")
-    print("Public Key: host_public.pem")
-    print("Private Key: host_private.pem")
+    print("\n✅ RSA Key Pair Loaded and Saved:")
+    print("Public Key → host_public.pem")
+    print("Private Key → host_private.pem")
 
-# --- Encrypt AES Key using Receiver's Public Key ---
+# --- Option 2: Encrypt AES Key using Receiver's Public Key ---
 def encrypt_aes_key_to_qr():
     aes_key = input("Enter AES key to encrypt: ")
-    pub_path = input("Enter path to receiver's public key (.pem): ")
+    pub_path = input("Enter path to receiver's public key (.pem): ").strip()
 
     try:
         with open(pub_path, "r") as f:
@@ -53,7 +66,7 @@ def encrypt_aes_key_to_qr():
     qrcode.make(payload).save(file_path)
     print(f"🔐 AES Key QR saved as {file_path}")
 
-# --- Encrypt Plaintext using AES Key ---
+# --- Option 3: Encrypt Plaintext using AES Key ---
 def derive_aes_key(passphrase: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(), length=32, salt=salt,
@@ -83,10 +96,10 @@ def encrypt_plaintext_to_qr():
     qrcode.make(payload).save(file_path)
     print(f"📝 Encrypted Message QR saved as {file_path}")
 
-# --- Decrypt AES Key using Receiver's Private Key ---
+# --- Option 4: Decrypt AES Key using Receiver's Private Key ---
 def decrypt_aes_key_from_qr():
-    qr_path = input("Enter path of AES Key QR: ")
-    priv_path = input("Enter path to your private key (.pem): ")
+    qr_path = input("Enter path of AES Key QR: ").strip()
+    priv_path = input("Enter path to your private key (.pem): ").strip()
 
     try:
         with open(priv_path, "r") as f:
@@ -97,6 +110,10 @@ def decrypt_aes_key_from_qr():
         return
 
     img = cv2.imread(qr_path)
+    if img is None:
+        print("❌ Failed to read QR image. Check the path.")
+        return
+
     detector = cv2.QRCodeDetector()
     data_str, _, _ = detector.detectAndDecode(img)
 
@@ -110,12 +127,16 @@ def decrypt_aes_key_from_qr():
     except Exception:
         print("❌ Failed to decrypt AES Key")
 
-# --- Decrypt Plaintext using AES Key and QR ---
+# --- Option 5: Decrypt Plaintext using AES Key and QR ---
 def decrypt_plaintext_from_qr():
-    qr_path = input("Enter path of Message QR: ")
+    qr_path = input("Enter path of Message QR: ").strip()
     aes_key = input("Enter AES key: ")
 
     img = cv2.imread(qr_path)
+    if img is None:
+        print("❌ Failed to read QR image. Check the path.")
+        return
+
     detector = cv2.QRCodeDetector()
     data_str, _, _ = detector.detectAndDecode(img)
 
@@ -137,7 +158,7 @@ def decrypt_plaintext_from_qr():
 def main():
     while True:
         print("\n--- Silent Key CLI ---")
-        print("1. Generate RSA Key Pair (Fixed)")
+        print("1. Load RSA Key Pair by Filename")
         print("2. Encrypt AES Key using Receiver's Public Key")
         print("3. Encrypt Plaintext using AES Key")
         print("4. Decrypt AES Key from QR using Receiver's Private Key")
@@ -146,7 +167,7 @@ def main():
         choice = input("Choose option (1/2/3/4/5/6): ")
 
         if choice == "1":
-            generate_rsa_key_pair()
+            load_rsa_keys_by_name()
         elif choice == "2":
             encrypt_aes_key_to_qr()
         elif choice == "3":
