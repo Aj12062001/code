@@ -1,12 +1,116 @@
-body { font-family: Arial, sans-serif; background: #f2f2f2; margin: 0; padding: 0; }
-.hero { text-align: center; padding: 30px; background: #007bff; color: #fff; }
-.logo { width: 80px; margin-bottom: 10px; }
-.container { max-width: 700px; margin: -30px auto 0 auto; background: #fff; padding: 30px; border-radius: 16px; }
-.card { padding: 20px; margin-bottom: 20px; background: #f8f9fa; border-radius: 12px; }
-textarea, input[type="password"], input[type="number"], input[type="file"] { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #ccc; }
-.btn-primary, .btn-secondary { width: 100%; padding: 10px; border: none; border-radius: 6px; cursor: pointer; margin-top: 5px; }
-.btn-primary { background: #007bff; color: #fff; }
-.btn-secondary { background: #ffcc33; color: #232526; }
-.qr-result img { max-width: 220px; display: block; margin: 15px auto; border: 2px solid #007bff; border-radius: 10px; }
-.decrypted-result { margin-top: 10px; font-weight: bold; text-align: center; color: green; }
-#timer { font-weight: bold; text-align: center; margin-top: 10px; color: red; }
+/* General body styles */
+body {
+    font-family: Arial, sans-serif;
+    background: #f2f2f2;
+    margin: 0;
+    padding: 0;
+}
+
+/* Hero section */
+.hero {
+    text-align: center;
+    padding: 30px;
+    background: #007bff;
+    color: #fff;
+}
+
+.logo {
+    width: 100px; /* decreased from 80px */
+    margin-bottom: 5px;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    color: #e0e0e0;
+}
+
+/* Main container */
+.container {
+    max-width: 800px;
+    margin: -30px auto 0 auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 16px;
+}
+
+/* Card sections */
+.card {
+    padding: 20px;
+    margin-bottom: 20px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* Inputs and textarea */
+textarea,
+input[type="password"],
+input[type="number"],
+input[type="file"],
+select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+}
+
+/* Buttons */
+.btn-primary,
+.btn-secondary {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-top: 5px;
+    font-weight: bold;
+}
+
+.btn-primary {
+    background: #007bff;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #28a745;
+    color: #fff;
+}
+
+/* QR Result */
+.qr-result img {
+    max-width: 220px;
+    display: block;
+    margin: 15px auto;
+    border: 2px solid #007bff;
+    border-radius: 10px;
+}
+
+/* Decrypted message result */
+.decrypted-result {
+    margin-top: 10px;
+    font-weight: bold;
+    text-align: center;
+    color: green;
+}
+
+/* Countdown timer */
+#timer {
+    font-weight: bold;
+    text-align: center;
+    margin-top: 10px;
+    color: red;
+}
+
+/* Expiry label */
+.expiry-label {
+    display: block;
+    margin-top: 0.5rem;
+}
+
+/* Hover effect for cards */
+.card:hover {
+    background: #eaeaea;
+    transition: background 0.3s ease;
+}

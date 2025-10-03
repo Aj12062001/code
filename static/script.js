@@ -1,66 +1,75 @@
-const encryptForm = document.getElementById("encryptForm");
-const decryptForm = document.getElementById("decryptForm");
+// --- Key Generation ---
+document.getElementById("genKeys").addEventListener("click", async () => {
+    const pub_name = document.getElementById("pub_name").value;
+    const priv_name = document.getElementById("priv_name").value;
+    const formData = new FormData();
+    formData.append("pub_name", pub_name);
+    formData.append("priv_name", priv_name);
 
-encryptForm.addEventListener("submit", async e => {
-    e.preventDefault();
-    const text = document.getElementById("text").value;
-    const passphrase = document.getElementById("passphrase").value;
+    const res = await fetch("/generate_keys", { method: "POST", body: formData });
+    const data = await res.json();
+    document.getElementById("keyResult").textContent = data.message;
+});
+
+// --- Encryption ---
+document.getElementById("encryptBtn").addEventListener("click", async () => {
+    const pub_file = document.getElementById("recipientPub").files[0];
+    const aes_key = document.getElementById("aes_key").value;
+    const message = document.getElementById("message").value;
     const expiry = document.getElementById("expiry").value;
     const mode = document.getElementById("mode").value;
 
     const formData = new FormData();
-    formData.append("text", text);
-    formData.append("passphrase", passphrase);
+    formData.append("pub_file", pub_file);
+    formData.append("aes_key", aes_key);
+    formData.append("message", message);
     formData.append("expiry", expiry);
     formData.append("mode", mode);
 
     const res = await fetch("/encrypt", { method: "POST", body: formData });
-    if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        document.getElementById("qrResult").innerHTML = `<img src="${url}" alt="QR Code" />`;
-    } else {
-        document.getElementById("qrResult").textContent = "❌ Encryption failed.";
-    }
+    const data = await res.json();
+    document.getElementById("qrResult").textContent =
+        `✅ AES file: ${data.aes_file}\n✅ QR file: ${data.qr_file}`;
 });
 
-decryptForm.addEventListener("submit", async e => {
-    e.preventDefault();
-    const file = document.getElementById("qrfile").files[0];
-    const passphrase = document.getElementById("decryptPassphrase").value;
+// --- Decryption ---
+let countdownInterval;
+
+document.getElementById("decryptBtn").addEventListener("click", async () => {
+    const priv_file = document.getElementById("privateKey").files[0];
+    const aes_file = document.getElementById("aesFile").files[0];
+    const qr_file = document.getElementById("qrFile").files[0];
+    const aesInput = document.getElementById("aesInput").value;
 
     const formData = new FormData();
-    formData.append("qrfile", file);
-    formData.append("passphrase", passphrase);
+    formData.append("priv_file", priv_file);
+    formData.append("aes_file", aes_file);
+    formData.append("qr_file", qr_file);
+    formData.append("aes_key", aesInput);
 
     const res = await fetch("/decrypt", { method: "POST", body: formData });
     const data = await res.json();
+    document.getElementById("decryptedResult").textContent = `✅ Decrypted message:\n${data.message}`;
 
-    if (data.message) {
-        document.getElementById("decryptedResult").textContent = data.message;
-        if (data.info && data.info.includes("Remaining Time")) {
-            const seconds = parseInt(data.info.match(/\d+/)[0]);
-            startTimer(seconds);
-        } else {
-            document.getElementById("timer").textContent = data.info || "";
-        }
+    // Clear previous countdown
+    if (countdownInterval) clearInterval(countdownInterval);
+
+    if (data.info && data.info.includes("Remaining Time")) {
+        let seconds = parseInt(data.info.match(/\d+/)[0]);
+        const timerEl = document.getElementById("timer");
+        timerEl.textContent = `⏳ Remaining Time: ${seconds}s`;
+
+        countdownInterval = setInterval(() => {
+            seconds--;
+            if (seconds > 0) {
+                timerEl.textContent = `⏳ Remaining Time: ${seconds}s`;
+            } else {
+                timerEl.textContent = `[COUNTDOWN FINISHED]`;
+                clearInterval(countdownInterval);
+            }
+        }, 1000);
     } else {
-        document.getElementById("decryptedResult").textContent = data.error || "❌ Decryption failed.";
         document.getElementById("timer").textContent = "";
     }
 });
-
-function startTimer(seconds) {
-    let remaining = seconds;
-    document.getElementById("timer").textContent = `⏳ Message will disappear in ${remaining}s`;
-    const interval = setInterval(() => {
-        remaining--;
-        if (remaining > 0) {
-            document.getElementById("timer").textContent = `⏳ Message will disappear in ${remaining}s`;
-        } else {
-            clearInterval(interval);
-            document.getElementById("decryptedResult").textContent = "";
-            document.getElementById("timer").textContent = "⏱️ Message expired";
-        }
-    }, 1000);
-}
+    
