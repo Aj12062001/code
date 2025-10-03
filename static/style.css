@@ -1,12 +1,12 @@
 /* General body styles */
 body {
-    font-family: Arial, sans-serif;
-    background: #f2f2f2;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f4f6f8;
     margin: 0;
     padding: 0;
 }
 
-/* Hero section */
+/* Hero Section */
 .hero {
     text-align: center;
     padding: 30px;
@@ -15,8 +15,8 @@ body {
 }
 
 .logo {
-    width: 100px; /* decreased from 80px */
-    margin-bottom: 5px;
+    width: 80px;
+    margin-bottom: 10px;
 }
 
 .subtitle {
@@ -24,48 +24,73 @@ body {
     color: #e0e0e0;
 }
 
-/* Main container */
-.container {
-    max-width: 800px;
-    margin: -30px auto 0 auto;
-    background: #fff;
-    padding: 30px;
-    border-radius: 16px;
+/* Container Table */
+.container table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: -20px;
 }
 
-/* Card sections */
+.container td {
+    width: 33.33%; /* Equal width */
+    vertical-align: top;
+    padding: 15px;
+}
+
+/* Cards */
 .card {
+    background: #fff;
     padding: 20px;
-    margin-bottom: 20px;
-    background: #f8f9fa;
     border-radius: 12px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Inputs and textarea */
-textarea,
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Labels and Inputs */
+label {
+    display: block;
+    margin-top: 10px;
+    font-weight: 600;
+    color: #333;
+}
+
+input[type="text"],
 input[type="password"],
 input[type="number"],
 input[type="file"],
+textarea,
 select {
     width: 100%;
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: 10px 12px;
+    margin-top: 5px;
     border-radius: 6px;
     border: 1px solid #ccc;
     box-sizing: border-box;
+    font-size: 0.95rem;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 60px;
 }
 
 /* Buttons */
 .btn-primary,
 .btn-secondary {
     width: 100%;
-    padding: 10px;
+    padding: 12px;
+    margin-top: 15px;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    margin-top: 5px;
     font-weight: bold;
+    font-size: 1rem;
+    transition: background 0.2s ease, transform 0.2s ease;
 }
 
 .btn-primary {
@@ -73,44 +98,65 @@ select {
     color: #fff;
 }
 
+.btn-primary:hover {
+    background: #0056b3;
+    transform: translateY(-2px);
+}
+
 .btn-secondary {
     background: #28a745;
     color: #fff;
 }
 
-/* QR Result */
-.qr-result img {
-    max-width: 220px;
+.btn-secondary:hover {
+    background: #1e7e34;
+    transform: translateY(-2px);
+}
+
+/* QR & Result Display */
+#qrResult img,
+#decryptedResult {
     display: block;
-    margin: 15px auto;
+    margin: 15px auto 0 auto;
+    max-width: 100%;
     border: 2px solid #007bff;
     border-radius: 10px;
+    padding: 5px;
+    background: #f8f9fa;
 }
 
-/* Decrypted message result */
-.decrypted-result {
-    margin-top: 10px;
+#decryptedResult {
     font-weight: bold;
+    color: #2d862d;
     text-align: center;
-    color: green;
+    word-wrap: break-word;
+    min-height: 40px;
 }
 
-/* Countdown timer */
+/* Countdown Timer */
 #timer {
-    font-weight: bold;
     text-align: center;
+    font-weight: bold;
+    color: #d9534f;
     margin-top: 10px;
-    color: red;
 }
 
-/* Expiry label */
-.expiry-label {
-    display: block;
-    margin-top: 0.5rem;
-}
-
-/* Hover effect for cards */
-.card:hover {
-    background: #eaeaea;
+/* Hover effect for table row */
+.container table tr:hover td {
+    background: #f0f4f7;
     transition: background 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .container table,
+    .container tr,
+    .container td {
+        display: block;
+        width: 100%;
+    }
+
+    .container td {
+        margin-bottom: 20px;
+    }
 }

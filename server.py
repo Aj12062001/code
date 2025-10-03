@@ -1,27 +1,59 @@
-# server_combined.py
-from flask import Flask, request, jsonify, send_file, send_from_directory
-import os, base64, json, time, threading
+from flask import Flask, request, jsonify, render_template, send_file
+import os, base64, json, time, threading, qrcode
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-import qrcode, cv2, numpy as np
-
-# PyCryptodome RSA
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
+from flask import Flask, send_from_directory
 
 app = Flask(__name__, static_folder="static")
+SAVE_KEYS = "saved_keys"
+SAVE_QR = "saved_qr_codes"
+os.makedirs(SAVE_KEYS, exist_ok=True)
+os.makedirs(SAVE_QR, exist_ok=True)
 
-SAVE_DIR = "saved_qr_codes"
-os.makedirs(SAVE_DIR, exist_ok=True)
-
-qr_usage = {}     # { qr_id: first_decryption_time }
+# --- In-memory tracking for QR expiration ---
+qr_usage = {}     # { qr_id: first_use_time }
 qr_expired = {}   # { qr_id: True/False }
-qr_mode = {}      # { qr_id: "normal" / "one-time" / "rsa" }
+qr_mode = {}      # { qr_id: "normal"/"one-time" }
 qr_files = {}     # { qr_id: file_path }
 
-# --- Key Derivation (for legacy/passphrase mode) ---
+# ---------------- Key Generation ----------------
+@app.route("/generate_keys", methods=["POST"])
+def generate_keys():
+    pub_name = request.form.get("pub_name", "public")
+    priv_name = request.form.get("priv_name", "private")
+
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
+    priv_path = os.path.join(SAVE_KEYS, f"{priv_name}.pem")
+    pub_path = os.path.join(SAVE_KEYS, f"{pub_name}.pem")
+
+    priv_bytes = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    pub_bytes = key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    with open(priv_path, "wb") as f:
+        f.write(priv_bytes)
+    with open(pub_path, "wb") as f:
+        f.write(pub_bytes)
+
+    return jsonify({
+        "message": f"✅ Keys saved:\nPublic: {pub_path}\nPrivate: {priv_path}"
+    })
+
+# ---------------- Helper Functions ----------------
 def derive_key(passphrase: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -32,238 +64,149 @@ def derive_key(passphrase: str, salt: bytes) -> bytes:
     )
     return kdf.derive(passphrase.encode())
 
-# --- Usage / Expiry handling (shared) ---
-def schedule_destruction(qr_id, delay):
+def schedule_deletion(qr_id, delay):
     time.sleep(delay)
+    if qr_id in qr_files and os.path.exists(qr_files[qr_id]):
+        os.remove(qr_files[qr_id])
     qr_expired[qr_id] = True
-    file_path = qr_files.get(qr_id)
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except Exception:
-            pass
-        print(f"[AUTO-DESTRUCT] QR file {file_path} deleted.")
     qr_files.pop(qr_id, None)
     qr_usage.pop(qr_id, None)
     qr_mode.pop(qr_id, None)
 
-def destroy_now(qr_id):
-    qr_expired[qr_id] = True
-    file_path = qr_files.get(qr_id)
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except Exception:
-            pass
-        print(f"[ONE-TIME] QR file {file_path} deleted instantly.")
-    qr_files.pop(qr_id, None)
-    qr_usage.pop(qr_id, None)
-    qr_mode.pop(qr_id, None)
-
-def handle_usage_and_countdown(qr_id, expiry, mode):
-    """Return (ok:bool, info_or_error:str) — manages usage/expiry/threads."""
-    if qr_expired.get(qr_id, False):
-        return False, "QR code permanently expired"
-
-    now = int(time.time())
-    if mode == "one-time":
-        if qr_id in qr_usage:
-            return False, "QR already used and destroyed"
-        qr_usage[qr_id] = now
-        destroy_now(qr_id)
-        return True, "[ONE-TIME] QR destroyed instantly."
-    else:
-        if qr_id in qr_usage:
-            first_use = qr_usage[qr_id]
-            elapsed = now - first_use
-            if elapsed > expiry:
-                qr_expired[qr_id] = True
-                return False, "QR code permanently expired"
-            remaining = expiry - elapsed
-        else:
-            qr_usage[qr_id] = now
-            remaining = expiry
-            # schedule deletion
-            threading.Thread(target=schedule_destruction, args=(qr_id, expiry), daemon=True).start()
-        return True, f"⏳ Remaining Time: {remaining} seconds"
-
-# --- Encryption helpers ---
-def create_qr_from_payload(payload_dict, qr_id):
-    payload_json = json.dumps(payload_dict)
-    img = qrcode.make(payload_json)
-    file_path = os.path.join(SAVE_DIR, f"{qr_id}.png")
-    img.save(file_path)
-    qr_files[qr_id] = file_path
-    qr_expired[qr_id] = False
-    return file_path
-
-# --- Routes ---
-@app.route("/")
-def index():
-    return send_from_directory(app.static_folder, "index.html")
-
+# ---------------- Encryption ----------------
 @app.route("/encrypt", methods=["POST"])
 def encrypt():
-    """
-    Supports three modes:
-    - normal / one-time: use passphrase (PBKDF2 -> AES-GCM) [legacy: previously CFB]
-      required form fields: text, passphrase, expiry, mode (optional)
-    - rsa: recipient_pub (file) must be uploaded. The server:
-        - generates a random AES key (32 bytes),
-        - encrypts plaintext with AES-GCM,
-        - encrypts AES key with recipient's RSA public key (PKCS1_OAEP),
-        - payload contains encrypted_key + nonce + ciphertext, expiry, mode='rsa'
-      required form fields: text, expiry, mode=rsa, recipient_pub (file)
-    """
-    text = request.form.get("text", "")
+    pub_file = request.files.get("pub_file")
+    aes_key = request.form.get("aes_key", "")
+    mode = request.form.get("mode", "normal")
+    message = request.form.get("message", "")
     expiry = int(request.form.get("expiry", "60"))
-    mode = request.form.get("mode", "normal").strip().lower()
-    if mode not in ["normal", "one-time", "rsa"]:
-        mode = "normal"
+
+    if not pub_file or not aes_key or not message:
+        return jsonify({"error": "Missing input"}), 400
+
+    # Save AES key file encrypted with public key
+    pub_key = serialization.load_pem_public_key(pub_file.read(), backend=default_backend())
+    encrypted_aes = pub_key.encrypt(
+        aes_key.encode(),
+        serialization.padding.OAEP(
+            mgf=serialization.padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    aes_file_name = f"aes_{base64.urlsafe_b64encode(os.urandom(4)).decode()}.pem"
+    aes_path = os.path.join(SAVE_QR, aes_file_name)
+    with open(aes_path, "wb") as f:
+        f.write(encrypted_aes)
+
+    # Encrypt message to QR
+    salt = os.urandom(16)
+    iv = os.urandom(16)
+    key_bytes = derive_key(aes_key, salt)
+    cipher = Cipher(algorithms.AES(key_bytes), modes.CFB(iv), backend=default_backend())
+    ct = cipher.encryptor().update(message.encode()) + cipher.encryptor().finalize()
 
     qr_id = base64.urlsafe_b64encode(os.urandom(6)).decode()
+    payload = {
+        "qr_id": qr_id,
+        "mode": mode,
+        "expiry": expiry,
+        "salt": base64.b64encode(salt).decode(),
+        "iv": base64.b64encode(iv).decode(),
+        "ciphertext": base64.b64encode(ct).decode()
+    }
 
-    if mode == "rsa":
-        # RSA wrapping mode -> require recipient public key file
-        if "recipient_pub" not in request.files:
-            return jsonify({"error": "Recipient public key file 'recipient_pub' is required for rsa mode"}), 400
-        pub_file = request.files["recipient_pub"].read()
-        try:
-            recipient_pub = RSA.import_key(pub_file)
-        except Exception as e:
-            return jsonify({"error": f"Failed to load recipient public key: {str(e)}"}), 400
+    qr_file_name = f"{qr_id}.png"
+    qr_path = os.path.join(SAVE_QR, qr_file_name)
+    img = qrcode.make(json.dumps(payload))
+    img.save(qr_path)
+    qr_files[qr_id] = qr_path
+    qr_mode[qr_id] = mode
 
-        # generate AES key and encrypt plaintext with AES-GCM
-        aes_key = os.urandom(32)  # AES-256 key
-        aesgcm = AESGCM(aes_key)
-        nonce = os.urandom(12)  # GCM nonce
-        ciphertext = aesgcm.encrypt(nonce, text.encode(), None)  # includes tag
+    if mode == "normal":
+        threading.Thread(target=schedule_deletion, args=(qr_id, expiry), daemon=True).start()
 
-        # encrypt AES key with recipient RSA public key (OAEP)
-        rsa_cipher = PKCS1_OAEP.new(recipient_pub)
-        enc_key = rsa_cipher.encrypt(aes_key)
+    return jsonify({
+        "message": "✅ Encryption Complete",
+        "aes_file": aes_path,
+        "qr_file": qr_path
+    })
 
-        payload = {
-            "qr_id": qr_id,
-            "mode": "rsa",
-            "expiry": expiry,
-            "encrypted_key": base64.b64encode(enc_key).decode(),
-            "nonce": base64.b64encode(nonce).decode(),
-            "ciphertext": base64.b64encode(ciphertext).decode()
-        }
-
-        file_path = create_qr_from_payload(payload, qr_id)
-        qr_mode[qr_id] = "rsa"
-        # schedule destruction maintained by handle on first decrypt (same as others)
-        return send_file(file_path, mimetype="image/png")
-
-    else:
-        # normal / one-time passphrase-based. Use PBKDF2 + AES-GCM (safer than CFB)
-        passphrase = request.form.get("passphrase", "")
-        if passphrase == "":
-            return jsonify({"error": "passphrase is required for normal/one-time modes"}), 400
-
-        salt = os.urandom(16)
-        # derive key
-        key = derive_key(passphrase, salt)
-        aesgcm = AESGCM(key)
-        nonce = os.urandom(12)
-        ciphertext = aesgcm.encrypt(nonce, text.encode(), None)
-
-        payload = {
-            "qr_id": qr_id,
-            "mode": mode,
-            "expiry": expiry,
-            "salt": base64.b64encode(salt).decode(),
-            "nonce": base64.b64encode(nonce).decode(),
-            "ciphertext": base64.b64encode(ciphertext).decode()
-        }
-
-        file_path = create_qr_from_payload(payload, qr_id)
-        qr_mode[qr_id] = mode
-        return send_file(file_path, mimetype="image/png")
-
+# ---------------- Decryption ----------------
 @app.route("/decrypt", methods=["POST"])
 def decrypt():
-    """
-    Decrypts a QR image uploaded in 'qrfile'.
-    For:
-      - normal/one-time: requires 'passphrase' form field.
-      - rsa: requires 'private_key' file upload (the receiver's private key).
-    Returns JSON with either {"message": "...", "info": "..."} or {"error": "..."}
-    """
-    if "qrfile" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    priv_file = request.files.get("priv_file")
+    aes_file = request.files.get("aes_file")
+    qr_file = request.files.get("qr_file")
+    aes_input = request.form.get("aes_key", "")
 
-    qrfile = request.files["qrfile"].read()
-    np_img = np.frombuffer(qrfile, np.uint8)
+    if not priv_file or not aes_file or not qr_file:
+        return jsonify({"error": "Missing input"}), 400
+
+    priv_key = serialization.load_pem_private_key(priv_file.read(), password=None, backend=default_backend())
+    encrypted_aes = aes_file.read()
+    aes_key_bytes = priv_key.decrypt(
+        encrypted_aes,
+        serialization.padding.OAEP(
+            mgf=serialization.padding.MGF1(algorithm=hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None
+        )
+    )
+    aes_key = aes_key_bytes.decode()
+
+    if aes_input.strip() != "":
+        aes_key = aes_input.strip()
+
+    # Read QR and decrypt
+    import cv2, numpy as np
+    np_img = np.frombuffer(qr_file.read(), np.uint8)
     img = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
     detector = cv2.QRCodeDetector()
-    data_str, points, _ = detector.detectAndDecode(img)
-
+    data_str, _, _ = detector.detectAndDecode(img)
     if not data_str:
-        return jsonify({"error": "No QR code detected"}), 400
+        return jsonify({"error": "Invalid QR file"}), 400
 
-    try:
-        payload = json.loads(data_str)
-        qr_id = payload["qr_id"]
-    except Exception:
-        return jsonify({"error": "Invalid QR payload"}), 400
+    payload = json.loads(data_str)
+    qr_id = payload["qr_id"]
+    if qr_mode.get(qr_id) == "one-time":
+        qr_expired[qr_id] = True
+        if qr_id in qr_files and os.path.exists(qr_files[qr_id]):
+            os.remove(qr_files[qr_id])
+        qr_files.pop(qr_id, None)
 
-    mode = payload.get("mode", "normal")
+    salt = base64.b64decode(payload["salt"])
+    iv = base64.b64decode(payload["iv"])
+    ciphertext = base64.b64decode(payload["ciphertext"])
 
-    # Handle usage/expiry/one-time logic first
-    expiry = int(payload.get("expiry", 60))
-    ok, info = handle_usage_and_countdown(qr_id, expiry, mode)
-    if not ok:
-        return jsonify({"error": info}), 400
+    key_bytes = derive_key(aes_key, salt)
+    cipher = Cipher(algorithms.AES(key_bytes), modes.CFB(iv), backend=default_backend())
+    decrypted = cipher.decryptor().update(ciphertext) + cipher.decryptor().finalize()
+    decrypted_text = decrypted.decode()
 
-    # RSA mode: need private key to decrypt AES key first
-    if mode == "rsa":
-        if "private_key" not in request.files:
-            return jsonify({"error": "Private key file 'private_key' required for rsa mode"}), 400
-        priv_file = request.files["private_key"].read()
-        try:
-            private_key = RSA.import_key(priv_file)
-        except Exception as e:
-            return jsonify({"error": f"Failed to load private key: {str(e)}"}), 400
+    info = ""
+    if payload["mode"] == "normal":
+        first_use = qr_usage.get(qr_id, int(time.time()))
+        qr_usage[qr_id] = first_use
+        remaining = payload["expiry"] - (int(time.time()) - first_use)
+        info = f"⏳ Remaining Time: {remaining if remaining>0 else 0} seconds"
+        if remaining <= 0 and qr_id in qr_files and os.path.exists(qr_files[qr_id]):
+            os.remove(qr_files[qr_id])
+            info += f"\n[DELETED] QR file removed (time-expired): {qr_files[qr_id]}"
 
-        try:
-            enc_key_b64 = payload["encrypted_key"]
-            nonce_b64 = payload["nonce"]
-            ct_b64 = payload["ciphertext"]
+    return jsonify({
+        "aes_key": aes_key,
+        "message": decrypted_text,
+        "info": info
+    })
 
-            enc_key = base64.b64decode(enc_key_b64)
-            nonce = base64.b64decode(nonce_b64)
-            ciphertext = base64.b64decode(ct_b64)
-
-            rsa_cipher = PKCS1_OAEP.new(private_key)
-            aes_key = rsa_cipher.decrypt(enc_key)
-
-            aesgcm = AESGCM(aes_key)
-            decrypted = aesgcm.decrypt(nonce, ciphertext, None)
-            message = decrypted.decode()
-            return jsonify({"message": message, "info": info})
-        except Exception as e:
-            return jsonify({"error": "Failed to decrypt rsa-mode QR: " + str(e)}), 400
-
-    else:
-        # normal / one-time: passphrase-based PBKDF2 key derivation + AES-GCM
-        passphrase = request.form.get("passphrase", "")
-        if passphrase == "":
-            return jsonify({"error": "passphrase is required for normal/one-time modes"}), 400
-        try:
-            salt = base64.b64decode(payload["salt"])
-            nonce = base64.b64decode(payload["nonce"])
-            ciphertext = base64.b64decode(payload["ciphertext"])
-            key = derive_key(passphrase, salt)
-            aesgcm = AESGCM(key)
-            decrypted = aesgcm.decrypt(nonce, ciphertext, None)
-            message = decrypted.decode()
-            return jsonify({"message": message, "info": info})
-        except Exception as e:
-            return jsonify({"error": "Failed to decrypt message: " + str(e)}), 400
+# ---------------- Frontend ----------------
+@app.route("/")
+def index():
+    # Serve index.html directly from static folder
+    return send_from_directory(app.static_folder, "index.html")
 
 if __name__ == "__main__":
-    print("Starting Flask server with RSA/AES QR support...")
+    print("Starting Flask server...")
     app.run(debug=True)

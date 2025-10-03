@@ -1,60 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Silent Key - Secure QR Encryption</title>
-  <link rel="stylesheet" href="/static/style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Silent Key - Secure QR Encryption</title>
+<link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-  <div class="hero">
+
+<!-- Hero Section -->
+<div class="hero">
     <img src="/static/logo.png" alt="Logo" class="logo" />
     <h1>Silent Key</h1>
     <p class="subtitle">Share secrets securely via QR codes</p>
-  </div>
+</div>
 
-  <div class="container">
+<!-- Main Dashboard Container -->
+<div class="container">
     <table>
-      <tr>
-        <td>
-          <div class="card">
-            <h2>Encrypt Message</h2>
-            <form id="encryptForm">
-              <textarea id="text" placeholder="Enter your secret message..." required></textarea>
-              <input type="password" id="passphrase" placeholder="Passphrase" required />
-              <label class="expiry-label">Expiry (seconds for countdown after first decryption):
-                <input type="number" id="expiry" value="60" min="1" required />
-              </label>
-              <select id="mode">
-                <option value="normal">Normal</option>
-                <option value="one-time">One-Time</option>
-                <option value="rsa">RSA</option>
-              </select>
-              <label for="recipientPub">Recipient Public Key (.pem):</label>
-              <input type="file" id="recipientPub" accept=".pem" />
-              <label for="privateKey">Your Private Key (.pem):</label>
-              <input type="file" id="privateKey" accept=".pem" />
-              <button type="submit" class="btn-primary">Generate QR Code</button>
-            </form>
-            <div id="qrResult" class="qr-result"></div>
-          </div>
-        </td>
-        <td>
-          <div class="card">
-            <h2>Decrypt Message</h2>
-            <form id="decryptForm">
-              <input type="file" id="qrfile" accept="image/*" required />
-              <input type="password" id="decryptPassphrase" placeholder="Passphrase" />
-              <div id="timer"></div>
-              <button type="submit" class="btn-secondary">Decrypt QR Code</button>
-            </form>
-            <div id="decryptedResult" class="decrypted-result"></div>
-          </div>
-        </td>
-      </tr>
-    </table>
-  </div>
+        <tr>
+            <!-- Key Generation Cell -->
+            <td class="card">
+                <h2>Key Generation</h2>
+                <label for="pub_name">Public Key File Name:</label>
+                <input type="text" id="pub_name" placeholder="Enter public key name" />
+                <label for="priv_name">Private Key File Name:</label>
+                <input type="text" id="priv_name" placeholder="Enter private key name" />
+                <button id="genKeys" class="btn-primary">Generate Keys</button>
+                <div id="keyResult"></div>
+            </td>
 
-  <script src="/static/script.js"></script>
+            <!-- Encryption Cell -->
+            <td class="card">
+                <h2>Encrypt Message</h2>
+                <label for="pubPath">Receiver Public Key (.pem):</label>
+                <input type="file" id="pubPath" accept=".pem" />
+                
+                <label for="aesKey">AES Key (any length string):</label>
+                <input type="text" id="aesKey" placeholder="Enter AES key" />
+                
+                <label for="mode">Mode:</label>
+                <select id="mode">
+                    <option value="normal">Normal</option>
+                    <option value="one-time">One-Time</option>
+                </select>
+
+                <label for="message">Message:</label>
+                <textarea id="message" placeholder="Enter message to encrypt"></textarea>
+
+                <label for="expiry">Expiry Time (seconds, for normal mode):</label>
+                <input type="number" id="expiry" value="60" min="1" />
+
+                <button id="encryptBtn" class="btn-primary">Encrypt</button>
+                <div id="qrResult"></div>
+            </td>
+
+            <!-- Decryption Cell -->
+            <td class="card">
+                <h2>Decrypt Message</h2>
+                <label for="privFile">Your Private Key (.pem):</label>
+                <input type="file" id="privFile" accept=".pem" />
+                
+                <label for="aesFile">Encrypted AES Key (.pem):</label>
+                <input type="file" id="aesFile" accept=".pem" />
+                
+                <label for="qrFile">QR File to Decrypt:</label>
+                <input type="file" id="qrFile" accept="image/*" />
+                
+                <label for="decryptAES">AES Key to Use (optional, leave blank to use decrypted key):</label>
+                <input type="text" id="decryptAES" placeholder="Enter AES key if needed" />
+
+                <button id="decryptBtn" class="btn-secondary">Decrypt</button>
+                <div id="decryptedResult"></div>
+                <div id="timer"></div>
+            </td>
+        </tr>
+    </table>
+</div>
+
+<script src="/static/script.js"></script>
 </body>
 </html>
