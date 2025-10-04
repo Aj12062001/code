@@ -1,162 +1,204 @@
-/* General body styles */
+/* F:\mini project\code\static\style.css */
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #f4f6f8;
     margin: 0;
     padding: 0;
-}
-
-/* Hero Section */
-.hero {
-    text-align: center;
-    padding: 30px;
-    background: #007bff;
-    color: #fff;
-}
-
-.logo {
-    width: 80px;
-    margin-bottom: 10px;
-}
-
-.subtitle {
-    font-size: 1.2rem;
+    background-color: #1a1a2e; /* Dark background */
     color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
 }
 
-/* Container Table */
-.container table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: -20px;
+.dashboard-header {
+    background-color: #0f3460; /* Darker blue for header */
+    color: #e94560; /* Accent color */
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    margin-bottom: 20px;
 }
 
-.container td {
-    width: 33.33%; /* Equal width */
-    vertical-align: top;
-    padding: 15px;
+.dashboard-header .logo {
+    height: 40px; /* Adjust logo size */
+    margin-right: 15px;
 }
 
-/* Cards */
-.card {
-    background: #fff;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-}
-
-/* Labels and Inputs */
-label {
-    display: block;
-    margin-top: 10px;
+h1 {
+    margin: 0;
+    font-size: 2em;
     font-weight: 600;
-    color: #333;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); /* Three equal width columns */
+    gap: 20px;
+    padding: 20px;
+    max-width: 1400px;
+    margin: auto;
+    flex-grow: 1;
+}
+
+.cell {
+    background-color: #0f3460; /* Dark blue for cells */
+    border-radius: 12px;
+    padding: 25px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Distribute content */
+}
+
+.cell:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+}
+
+h2 {
+    color: #e94560; /* Accent color for titles */
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.6em;
+    border-bottom: 2px solid #1a1a2e; /* Subtle separator */
+    padding-bottom: 10px;
+}
+
+.input-group {
+    margin-bottom: 15px;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #b0c4de; /* Lighter text for labels */
 }
 
 input[type="text"],
 input[type="password"],
 input[type="number"],
-input[type="file"],
 textarea,
 select {
-    width: 100%;
-    padding: 10px 12px;
-    margin-top: 5px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-    box-sizing: border-box;
-    font-size: 0.95rem;
+    width: calc(100% - 20px); /* Adjust for padding */
+    padding: 10px;
+    border: 1px solid #1a1a2e; /* Darker border */
+    border-radius: 8px;
+    background-color: #2e4a77; /* Slightly lighter background for inputs */
+    color: #e0e0e0;
+    font-size: 1em;
+    box-sizing: border-box; /* Include padding in width */
+    transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
 }
 
-textarea {
-    resize: vertical;
-    min-height: 60px;
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+    border-color: #e94560; /* Accent color on focus */
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.3); /* Subtle glow */
 }
 
-/* Buttons */
-.btn-primary,
-.btn-secondary {
-    width: 100%;
-    padding: 12px;
-    margin-top: 15px;
+button {
+    background-color: #e94560; /* Accent color for buttons */
+    color: white;
     border: none;
-    border-radius: 6px;
+    padding: 12px 20px;
+    border-radius: 8px;
     cursor: pointer;
-    font-weight: bold;
-    font-size: 1rem;
-    transition: background 0.2s ease, transform 0.2s ease;
-}
-
-.btn-primary {
-    background: #007bff;
-    color: #fff;
-}
-
-.btn-primary:hover {
-    background: #0056b3;
-    transform: translateY(-2px);
-}
-
-.btn-secondary {
-    background: #28a745;
-    color: #fff;
-}
-
-.btn-secondary:hover {
-    background: #1e7e34;
-    transform: translateY(-2px);
-}
-
-/* QR & Result Display */
-#qrResult img,
-#decryptedResult {
-    display: block;
-    margin: 15px auto 0 auto;
-    max-width: 100%;
-    border: 2px solid #007bff;
-    border-radius: 10px;
-    padding: 5px;
-    background: #f8f9fa;
-}
-
-#decryptedResult {
-    font-weight: bold;
-    color: #2d862d;
-    text-align: center;
-    word-wrap: break-word;
-    min-height: 40px;
-}
-
-/* Countdown Timer */
-#timer {
-    text-align: center;
-    font-weight: bold;
-    color: #d9534f;
+    font-size: 1em;
+    font-weight: 600;
+    transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+    width: 100%;
     margin-top: 10px;
 }
 
-/* Hover effect for table row */
-.container table tr:hover td {
-    background: #f0f4f7;
-    transition: background 0.3s ease;
+button:hover {
+    background-color: #c93551; /* Darker accent on hover */
+    transform: translateY(-2px);
 }
 
-/* Responsive */
-@media (max-width: 900px) {
-    .container table,
-    .container tr,
-    .container td {
-        display: block;
-        width: 100%;
-    }
+button:active {
+    transform: translateY(0);
+}
 
-    .container td {
-        margin-bottom: 20px;
+/* Specific refresh button style */
+.input-group button {
+    width: auto;
+    padding: 8px 12px;
+    margin-left: 10px;
+    vertical-align: middle;
+    font-size: 0.9em;
+    background-color: #4a6fa5;
+}
+
+.input-group button:hover {
+    background-color: #3b5a8c;
+}
+
+.output {
+    background-color: #2e4a77;
+    border-radius: 8px;
+    padding: 15px;
+    margin-top: 20px;
+    min-height: 60px; /* Ensure some space even if empty */
+    white-space: pre-wrap; /* Preserve formatting for output */
+    font-family: 'Consolas', 'Monaco', monospace; /* Monospace for code-like output */
+    font-size: 0.9em;
+    border: 1px solid #1a1a2e;
+    overflow-x: auto; /* Allow horizontal scrolling for long paths */
+}
+
+#qrCodeDisplay {
+    margin-top: 20px;
+    text-align: center;
+}
+
+#qrCodeDisplay img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid #e94560;
+}
+
+.countdown {
+    margin-top: 15px;
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #4CAF50; /* Green for countdown */
+    text-align: center;
+}
+
+.status-success { color: #4CAF50; } /* Green */
+.status-error { color: #F44336; } /* Red */
+.status-info { color: #2196F3; } /* Blue */
+.status-warning { color: #FFC107; } /* Yellow */
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .container {
+        grid-template-columns: repeat(2, 1fr); /* 2 columns on medium screens */
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        grid-template-columns: 1fr; /* 1 column on small screens */
+        padding: 15px;
+    }
+    .cell {
+        padding: 20px;
+    }
+    h1 {
+        font-size: 1.8em;
+    }
+    h2 {
+        font-size: 1.4em;
     }
 }

@@ -1,83 +1,89 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Silent Key - Secure QR Encryption</title>
-<link rel="stylesheet" href="/static/style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SilentKey | Secure QR Encryption</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="script.js" defer></script>
 </head>
 <body>
+  <header class="navbar">
+    <div class="logo-group">
+      <img src="logo.png" alt="SilentKey Logo" class="logo" />
+      <h1>SilentKey</h1>
+    </div>
+    <p class="tagline">Share secrets securely via QR codes</p>
+  </header>
 
-<!-- Hero Section -->
-<div class="hero">
-    <img src="/static/logo.png" alt="Logo" class="logo" />
-    <h1>Silent Key</h1>
-    <p class="subtitle">Share secrets securely via QR codes</p>
-</div>
+  <main class="container">
+    <!-- Key Generation -->
+    <section class="card">
+      <h2><span class="icon">🔐</span> Key Generation</h2>
+      <div class="form-group">
+        <label for="pubKey">Public Key Name</label>
+        <input type="text" id="pubKey" placeholder="e.g. ajin" />
+      </div>
+      <div class="form-group">
+        <label for="privKey">Private Key Name</label>
+        <input type="text" id="privKey" placeholder="e.g. jose" />
+      </div>
+      <button onclick="generateKeys()">Generate Keys</button>
+      <pre id="keyOutput" class="output"></pre>
+    </section>
 
-<!-- Main Dashboard Container -->
-<div class="container">
-    <table>
-        <tr>
-            <!-- Key Generation Cell -->
-            <td class="card">
-                <h2>Key Generation</h2>
-                <label for="pub_name">Public Key File Name:</label>
-                <input type="text" id="pub_name" placeholder="Enter public key name" />
-                <label for="priv_name">Private Key File Name:</label>
-                <input type="text" id="priv_name" placeholder="Enter private key name" />
-                <button id="genKeys" class="btn-primary">Generate Keys</button>
-                <div id="keyResult"></div>
-            </td>
+    <!-- Encryption -->
+    <section class="card">
+      <h2><span class="icon">🧪</span> Encryption</h2>
+      <div class="form-group">
+        <label for="encPubPath">Public Key Path</label>
+        <input type="text" id="encPubPath" placeholder="Path to .pem file" />
+      </div>
+      <div class="form-group">
+        <label for="aesKey">AES Key</label>
+        <input type="text" id="aesKey" placeholder="Any string" />
+      </div>
+      <div class="form-group">
+        <label for="mode">Encryption Mode</label>
+        <select id="mode" title="Select encryption mode">
+          <option value="normal">Normal</option>
+          <option value="one-time">One-time</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="message">Message</label>
+        <input type="text" id="message" placeholder="Your secret message" />
+      </div>
+      <div class="form-group">
+        <label for="expiry">Expiry Time (seconds)</label>
+        <input type="number" id="expiry" placeholder="e.g. 20" />
+      </div>
+      <button onclick="encrypt()">Encrypt Message</button>
+      <pre id="encOutput" class="output"></pre>
+    </section>
 
-            <!-- Encryption Cell -->
-            <td class="card">
-                <h2>Encrypt Message</h2>
-                <label for="pubPath">Receiver Public Key (.pem):</label>
-                <input type="file" id="pubPath" accept=".pem" />
-                
-                <label for="aesKey">AES Key (any length string):</label>
-                <input type="text" id="aesKey" placeholder="Enter AES key" />
-                
-                <label for="mode">Mode:</label>
-                <select id="mode">
-                    <option value="normal">Normal</option>
-                    <option value="one-time">One-Time</option>
-                </select>
-
-                <label for="message">Message:</label>
-                <textarea id="message" placeholder="Enter message to encrypt"></textarea>
-
-                <label for="expiry">Expiry Time (seconds, for normal mode):</label>
-                <input type="number" id="expiry" value="60" min="1" />
-
-                <button id="encryptBtn" class="btn-primary">Encrypt</button>
-                <div id="qrResult"></div>
-            </td>
-
-            <!-- Decryption Cell -->
-            <td class="card">
-                <h2>Decrypt Message</h2>
-                <label for="privFile">Your Private Key (.pem):</label>
-                <input type="file" id="privFile" accept=".pem" />
-                
-                <label for="aesFile">Encrypted AES Key (.pem):</label>
-                <input type="file" id="aesFile" accept=".pem" />
-                
-                <label for="qrFile">QR File to Decrypt:</label>
-                <input type="file" id="qrFile" accept="image/*" />
-                
-                <label for="decryptAES">AES Key to Use (optional, leave blank to use decrypted key):</label>
-                <input type="text" id="decryptAES" placeholder="Enter AES key if needed" />
-
-                <button id="decryptBtn" class="btn-secondary">Decrypt</button>
-                <div id="decryptedResult"></div>
-                <div id="timer"></div>
-            </td>
-        </tr>
-    </table>
-</div>
-
-<script src="/static/script.js"></script>
+    <!-- Decryption -->
+    <section class="card">
+      <h2><span class="icon">🔓</span> Decryption</h2>
+      <div class="form-group">
+        <label for="privPath">Private Key Path</label>
+        <input type="text" id="privPath" placeholder="Path to .pem file" />
+      </div>
+      <div class="form-group">
+        <label for="encAESPath">Encrypted AES Key Path</label>
+        <input type="text" id="encAESPath" placeholder="Path to encrypted AES file" />
+      </div>
+      <div class="form-group">
+        <label for="qrPath">QR File Path</label>
+        <input type="text" id="qrPath" placeholder="Path to QR image" />
+      </div>
+      <div class="form-group">
+        <label for="aesOverride">AES Override (optional)</label>
+        <input type="text" id="aesOverride" placeholder="Paste AES key if needed" />
+      </div>
+      <button onclick="decrypt()">Decrypt Message</button>
+      <pre id="decOutput" class="output"></pre>
+    </section>
+  </main>
 </body>
 </html>
