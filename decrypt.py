@@ -5,23 +5,26 @@ import base64
 import time
 import threading
 import cv2
+from typing import Optional, Tuple, Dict, Any
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-SAVE_DIR = "saved_qr_codes"
+# Ensure project-local save directory (resolves relative to file)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SAVE_DIR = os.path.join(BASE_DIR, "saved_qr_codes")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 META_SUFFIX = ".meta.json"
-PBKDF2_ITERS = 100_000
+PBKDF2_ITERS = 100_000  # keep parity with encrypt.py
 
 # ----------------- Helpers -----------------
 def meta_path_for(qr_id: str) -> str:
     return os.path.join(SAVE_DIR, f"{qr_id}{META_SUFFIX}")
 
-def load_meta(qr_id: str) -> dict | None:
+def load_meta(qr_id: str) -> Optional[dict]:
     p = meta_path_for(qr_id)
     if not os.path.exists(p):
         return None
@@ -31,12 +34,12 @@ def load_meta(qr_id: str) -> dict | None:
     except Exception:
         return None
 
-def save_meta(qr_id: str, meta: dict):
+def save_meta(qr_id: str, meta: dict) -> None:
     p = meta_path_for(qr_id)
     with open(p, "w", encoding="utf-8") as f:
         json.dump(meta, f)
 
-def remove_meta(qr_id: str):
+def remove_meta(qr_id: str) -> None:
     p = meta_path_for(qr_id)
     try:
         if os.path.exists(p):
@@ -44,7 +47,7 @@ def remove_meta(qr_id: str):
     except Exception:
         pass
 
-def destroy_qr_file(qr_path: str, qr_id: str, why: str):
+def destroy_qr_file(qr_path: str, qr_id: str, why: str) -> None:
     """Delete the QR file and update meta as expired/used."""
     try:
         if os.path.exists(qr_path):
@@ -59,19 +62,17 @@ def destroy_qr_file(qr_path: str, qr_id: str, why: str):
         meta['used'] = True
     save_meta(qr_id, meta)
 
-def schedule_destruction(qr_path: str, qr_id: str, delay: int):
+def schedule_destruction(qr_path: str, qr_id: str, delay: int) -> None:
     def _job():
         time.sleep(delay)
-        # only delete if still present
         if os.path.exists(qr_path):
             destroy_qr_file(qr_path, qr_id, "time-expired")
     t = threading.Thread(target=_job, daemon=True)
     t.start()
 
-def live_countdown(remaining_seconds: int, qr_path: str, qr_id: str):
+def live_countdown(remaining_seconds: int, qr_path: str, qr_id: str) -> None:
     try:
         for sec in range(remaining_seconds, 0, -1):
-            # If file already gone or meta expired — stop
             meta = load_meta(qr_id) or {}
             if meta.get('expired'):
                 print("\n[COUNTDOWN STOPPED] QR already expired.")
@@ -113,7 +114,8 @@ def derive_key(passphrase: str, salt: bytes) -> bytes:
     return kdf.derive(passphrase.encode())
 
 # ----------------- QR / Payload -----------------
-def read_qr_payload(qr_path: str) -> dict | None:
+def read_qr_payload(qr_path: str) -> Optional[dict]:
+    """Read QR image and return parsed JSON payload or None."""
     if not os.path.exists(qr_path):
         print("❌ QR file not found:", qr_path)
         return None
@@ -146,84 +148,76 @@ def decrypt_payload_with_aes(payload: dict, aes_passphrase: str) -> str:
     plain = decryptor.update(ciphertext) + decryptor.finalize()
     return plain.decode()
 
-# ----------------- Main flow -----------------
-def decrypt_flow():
-    print("\n--- Decrypt AES Key (RSA) ---")
-    private_key_path = input("Enter private key file path: ").strip()
-    enc_aes_path = input("Enter encrypted AES key file path: ").strip()
-
+# ----------------- Programmatic API -----------------
+def decrypt_qr_with_private(
+    private_key_path: str,
+    enc_aes_path: str,
+    qr_path: str,
+    override_aes_pass: Optional[str] = None
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Decrypt workflow in programmatic form.
+    Returns (success, info_dict). info_dict contains keys:
+      - message (decrypted message) on success
+      - error (error message) on failure
+      - meta (meta dict) for status (used/expired/first_use)
+      - aes_key (plaintext or base64) when available
+    """
+    info: Dict[str, Any] = {"meta": None}
+    # basic checks
     if not os.path.exists(private_key_path):
-        print("❌ Private key file does not exist.")
-        return
+        return False, {"error": "Private key file does not exist."}
     if not os.path.exists(enc_aes_path):
-        print("❌ Encrypted AES file does not exist.")
-        return
+        return False, {"error": "Encrypted AES file does not exist."}
+    if not os.path.exists(qr_path):
+        return False, {"error": "QR file does not exist."}
 
+    # decrypt AES
     try:
         aes_key_bytes = decrypt_aes_with_private(private_key_path, enc_aes_path)
     except Exception as e:
-        print("❌ Failed to decrypt AES key with provided private key:", e)
-        return
+        return False, {"error": f"Failed to decrypt AES key: {e}"}
 
-    # Show the decrypted AES key in plaintext if possible
-    aes_passphrase_str = None
+    aes_passphrase_str: Optional[str] = None
     try:
         aes_passphrase_str = aes_key_bytes.decode().strip()
-        print("✅ AES key decrypted.")
-        print("🔑 Decrypted AES key (plain text):", aes_passphrase_str)
+        info["aes_key"] = aes_passphrase_str
     except Exception:
-        # fallback: show base64 if raw bytes
-        b64 = base64.b64encode(aes_key_bytes).decode()
-        print("✅ AES key decrypted (binary).")
-        print("🔑 Decrypted AES key (base64):", b64)
+        # binary key; return base64 and require override
+        info["aes_key_base64"] = base64.b64encode(aes_key_bytes).decode()
         aes_passphrase_str = None
 
-    # Ask for QR to decrypt
-    qr_path = input("\nEnter QR file path to decrypt: ").strip()
     payload = read_qr_payload(qr_path)
     if payload is None:
-        return
+        return False, {"error": "Failed to read QR payload."}
 
-    # required fields
     qr_id = payload.get("qr_id")
     expiry = int(payload.get("expiry", 0))
     mode = payload.get("mode", "normal")
-
     if not qr_id:
-        print("❌ QR payload missing qr_id.")
-        return
+        return False, {"error": "QR payload missing qr_id."}
 
-    # allow user to override AES passphrase (or press Enter to use decrypted one)
-    use_choice = input("\nEnter AES key to use for QR decryption (press Enter to use decrypted AES key): ").strip()
-    if use_choice:
-        aes_pass = use_choice
+    # choose AES passphrase
+    if override_aes_pass:
+        aes_pass = override_aes_pass
     else:
         if aes_passphrase_str is None:
-            # decrypted AES key was binary; ask user to provide one
-            print("⚠️ Decrypted AES key is binary; you must paste the AES passphrase to use for decrypting the QR.")
-            aes_pass = input("Enter AES passphrase to use: ").strip()
-        else:
-            aes_pass = aes_passphrase_str
+            return False, {"error": "Decrypted AES key is binary; supply override_aes_pass (or base64->raw).",
+                           "aes_key_base64": info.get("aes_key_base64")}
+        aes_pass = aes_passphrase_str
 
-    # --------- Mode handling ----------
+    # handle modes
     meta = load_meta(qr_id) or {"qr_id": qr_id, "first_use": None, "used": False, "expired": False}
+    info["meta"] = meta
 
+    # one-time
     if mode == "one-time":
         if meta.get("used"):
-            print("❌ QR already used and destroyed (one-time mode).")
-            return
-
-        # Decrypt message
+            return False, {"error": "QR already used (one-time mode)."}
         try:
             message = decrypt_payload_with_aes(payload, aes_pass)
         except Exception:
-            print("❌ Wrong AES key or corrupted QR.")
-            return
-
-        # Show message, then destroy instantly
-        print("\n✅ Decrypted message (one-time):")
-        print(message)
-
+            return False, {"error": "Wrong AES key or corrupted QR."}
         # mark used and delete file
         meta['used'] = True
         meta['expired'] = True
@@ -231,15 +225,14 @@ def decrypt_flow():
         try:
             if os.path.exists(qr_path):
                 os.remove(qr_path)
-                print(f"[ONE-TIME] QR destroyed: {qr_path}")
         except Exception as e:
+            # non-fatal
             print(f"[WARN] Could not remove QR file: {e}")
-        return
+        return True, {"message": message, "meta": meta}
 
     # normal mode
     if meta.get("expired"):
-        print("❌ QR code permanently expired.")
-        return
+        return False, {"error": "QR code permanently expired."}
 
     now = int(time.time())
     if meta.get("first_use"):
@@ -247,56 +240,117 @@ def decrypt_flow():
         elapsed = now - first_use
         remaining = expiry - elapsed
         if remaining <= 0:
-            # expired, delete & mark
             meta['expired'] = True
             save_meta(qr_id, meta)
-            if os.path.exists(qr_path):
-                try:
+            try:
+                if os.path.exists(qr_path):
                     os.remove(qr_path)
-                    print("[AUTO-DELETE] QR removed due to expiry.")
-                except Exception:
-                    pass
-            print("❌ QR expired")
-            return
+            except Exception:
+                pass
+            return False, {"error": "QR expired", "meta": meta}
         else:
-            # decrypt and show (within remaining time)
             try:
                 message = decrypt_payload_with_aes(payload, aes_pass)
             except Exception:
-                print("❌ Wrong AES key or corrupted QR.")
-                return
-
-            print("\n✅ Decrypted message:")
-            print(message)
-            print(f"\n⏳ Remaining Time (resumed): {remaining} seconds")
+                return False, {"error": "Wrong AES key or corrupted QR."}
             # schedule deletion after remaining seconds
             schedule_destruction(qr_path, qr_id, remaining)
-            live_countdown(remaining, qr_path, qr_id)
-            return
+            return True, {"message": message, "remaining": remaining, "meta": meta}
     else:
-        # first time use: set first_use now and start countdown
+        # first time use
         meta['first_use'] = now
         save_meta(qr_id, meta)
         remaining = expiry
-
-        # decrypt now
         try:
             message = decrypt_payload_with_aes(payload, aes_pass)
         except Exception:
-            # If decryption fails, clear first_use (allow retry) to avoid starting timer incorrectly
             meta['first_use'] = None
             save_meta(qr_id, meta)
-            print("❌ Wrong AES key or corrupted QR.")
-            return
-
-        print("\n✅ Decrypted message (first use):")
-        print(message)
-        print(f"\n⏳ Remaining Time: {remaining} seconds")
-
-        # schedule deletion and show live countdown
+            return False, {"error": "Wrong AES key or corrupted QR."}
+        # schedule deletion and start countdown (if used interactively, caller can show countdown)
         schedule_destruction(qr_path, qr_id, remaining)
-        live_countdown(remaining, qr_path, qr_id)
-        return
+        return True, {"message": message, "remaining": remaining, "meta": meta}
+
+# ----------------- CLI wrapper (preserves original flow) -----------------
+def decrypt_flow():
+    print("\n--- Decrypt AES Key (RSA) ---")
+    private_key_path = input("Enter private key file path: ").strip()
+    enc_aes_path = input("Enter encrypted AES key file path: ").strip()
+
+    success, result = None, None
+    success, result = None, None
+    ok, res = decrypt_qr_interactive(private_key_path, enc_aes_path)
+    # decrypt_qr_interactive prints and returns nothing (keeps previous UX)
+    return
+
+def decrypt_qr_interactive(private_key_path: str, enc_aes_path: str) -> Tuple[bool, Dict[str, Any]]:
+    """Interactive helper for CLI (keeps similar prompts to original)."""
+    if not os.path.exists(private_key_path):
+        print("❌ Private key file does not exist.")
+        return False, {"error": "no private key"}
+    if not os.path.exists(enc_aes_path):
+        print("❌ Encrypted AES file does not exist.")
+        return False, {"error": "no enc aes"}
+
+    try:
+        aes_key_bytes = decrypt_aes_with_private(private_key_path, enc_aes_path)
+    except Exception as e:
+        print("❌ Failed to decrypt AES key with provided private key:", e)
+        return False, {"error": str(e)}
+
+    aes_passphrase_str = None
+    try:
+        aes_passphrase_str = aes_key_bytes.decode().strip()
+        print("✅ AES key decrypted.")
+        print("🔑 Decrypted AES key (plain text):", aes_passphrase_str)
+    except Exception:
+        b64 = base64.b64encode(aes_key_bytes).decode()
+        print("✅ AES key decrypted (binary).")
+        print("🔑 Decrypted AES key (base64):", b64)
+        aes_passphrase_str = None
+
+    qr_path = input("\nEnter QR file path to decrypt: ").strip()
+    payload = read_qr_payload(qr_path)
+    if payload is None:
+        return False, {"error": "invalid qr"}
+
+    qr_id = payload.get("qr_id")
+    expiry = int(payload.get("expiry", 0))
+    mode = payload.get("mode", "normal")
+    if not qr_id:
+        print("❌ QR payload missing qr_id.")
+        return False, {"error": "no qr_id"}
+
+    use_choice = input("\nEnter AES key to use for QR decryption (press Enter to use decrypted AES key): ").strip()
+    if use_choice:
+        aes_pass = use_choice
+    else:
+        if aes_passphrase_str is None:
+            print("⚠️ Decrypted AES key is binary; you must paste the AES passphrase to use for decrypting the QR.")
+            aes_pass = input("Enter AES passphrase to use: ").strip()
+        else:
+            aes_pass = aes_passphrase_str
+
+    success, info = decrypt_qr_with_private(private_key_path, enc_aes_path, qr_path, override_aes_pass=aes_pass)
+    if not success:
+        print("❌", info.get("error"))
+        return False, info
+
+    # success path prints result similar to original UX
+    msg = info.get("message", "")
+    if mode == "one-time":
+        print("\n✅ Decrypted message (one-time):")
+        print(msg)
+        print("[ONE-TIME] QR destroyed if present.")
+    else:
+        print("\n✅ Decrypted message:")
+        print(msg)
+        rem = info.get("remaining")
+        if rem is not None:
+            print(f"\n⏳ Remaining Time: {rem} seconds")
+            live_countdown(rem, qr_path, qr_id)
+    return True, info
 
 if __name__ == "__main__":
+    # run the interactive wrapper to preserve existing behavior
     decrypt_flow()

@@ -1,89 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SilentKey | Secure QR Encryption</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="script.js" defer></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silent Key - Secure QR Dashboard</title>
+<link rel="stylesheet" href="style.css">
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const modeSelect = document.getElementById('mode');
+    const expiryInput = document.getElementById('expiry_after_decrypt');
+
+    function toggleExpiry() {
+        if (modeSelect.value === 'one-time') {
+            expiryInput.disabled = true;
+            expiryInput.placeholder = 'Expiry not needed for One-Time';
+        } else {
+            expiryInput.disabled = false;
+            expiryInput.placeholder = 'Expiry after decryption (seconds)';
+        }
+    }
+
+    modeSelect.addEventListener('change', toggleExpiry);
+    toggleExpiry(); // initial check
+});
+</script>
 </head>
 <body>
-  <header class="navbar">
-    <div class="logo-group">
-      <img src="logo.png" alt="SilentKey Logo" class="logo" />
-      <h1>SilentKey</h1>
-    </div>
-    <p class="tagline">Share secrets securely via QR codes</p>
-  </header>
+<div class="header-section">
+  <img src="logo.png" alt="Logo" class="logo">
+  <div class="header-text">
+    <h1>Silent Key</h1>
+    <p class="motto">Secure QR Encryption & Decryption</p>
+  </div>
+</div>
 
-  <main class="container">
-    <!-- Key Generation -->
-    <section class="card">
-      <h2><span class="icon">🔐</span> Key Generation</h2>
-      <div class="form-group">
-        <label for="pubKey">Public Key Name</label>
-        <input type="text" id="pubKey" placeholder="e.g. ajin" />
-      </div>
-      <div class="form-group">
-        <label for="privKey">Private Key Name</label>
-        <input type="text" id="privKey" placeholder="e.g. jose" />
-      </div>
-      <button onclick="generateKeys()">Generate Keys</button>
-      <pre id="keyOutput" class="output"></pre>
-    </section>
+<div class="dashboard">
 
-    <!-- Encryption -->
-    <section class="card">
-      <h2><span class="icon">🧪</span> Encryption</h2>
-      <div class="form-group">
-        <label for="encPubPath">Public Key Path</label>
-        <input type="text" id="encPubPath" placeholder="Path to .pem file" />
-      </div>
-      <div class="form-group">
-        <label for="aesKey">AES Key</label>
-        <input type="text" id="aesKey" placeholder="Any string" />
-      </div>
-      <div class="form-group">
-        <label for="mode">Encryption Mode</label>
-        <select id="mode" title="Select encryption mode">
-          <option value="normal">Normal</option>
-          <option value="one-time">One-time</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="message">Message</label>
-        <input type="text" id="message" placeholder="Your secret message" />
-      </div>
-      <div class="form-group">
-        <label for="expiry">Expiry Time (seconds)</label>
-        <input type="number" id="expiry" placeholder="e.g. 20" />
-      </div>
-      <button onclick="encrypt()">Encrypt Message</button>
-      <pre id="encOutput" class="output"></pre>
-    </section>
+  <!-- Key Generation -->
+  <div class="cell">
+    <h2>Key Generation</h2>
+    <input type="text" id="pub_name" placeholder="Public Key Name">
+    <input type="text" id="priv_name" placeholder="Private Key Name">
+    <button onclick="generateKeys()">Generate Keys</button>
+    <pre id="keygen_result"></pre>
+  </div>
 
-    <!-- Decryption -->
-    <section class="card">
-      <h2><span class="icon">🔓</span> Decryption</h2>
-      <div class="form-group">
-        <label for="privPath">Private Key Path</label>
-        <input type="text" id="privPath" placeholder="Path to .pem file" />
-      </div>
-      <div class="form-group">
-        <label for="encAESPath">Encrypted AES Key Path</label>
-        <input type="text" id="encAESPath" placeholder="Path to encrypted AES file" />
-      </div>
-      <div class="form-group">
-        <label for="qrPath">QR File Path</label>
-        <input type="text" id="qrPath" placeholder="Path to QR image" />
-      </div>
-      <div class="form-group">
-        <label for="aesOverride">AES Override (optional)</label>
-        <input type="text" id="aesOverride" placeholder="Paste AES key if needed" />
-      </div>
-      <button onclick="decrypt()">Decrypt Message</button>
-      <pre id="decOutput" class="output"></pre>
-    </section>
-  </main>
+  <!-- Encryption -->
+  <div class="cell">
+    <h2>Encryption</h2>
+    <label for="pubKeySelect">Select Public Key File:</label>
+    <select id="pubKeySelect"></select>
+    <input type="text" id="aes_key" placeholder="AES Key">
+    <label for="mode">Encryption Mode:</label>
+    <select id="mode">
+      <option value="normal">Normal</option>
+      <option value="one-time">One-Time</option>
+    </select>
+    <input type="text" id="message" placeholder="Message">
+    <input type="number" id="expiry_after_decrypt" placeholder="Expiry after decryption (seconds)">
+    <button onclick="encryptMessage()">Encrypt</button>
+    <pre id="encrypt_result"></pre>
+    <button id="share_btn" style="display:none;" onclick="shareFiles()">Share</button>
+  </div>
+
+  <!-- Decryption -->
+  <div class="cell">
+    <h2>Decryption</h2>
+    <label>Private Key File (optional if overriding AES key):</label>
+    <input type="file" id="priv_file" title="Select your private key file" placeholder="Choose private key file">
+    <label>Encrypted AES File (optional if overriding AES key):</label>
+    <input type="file" id="enc_aes_file" title="Select your encrypted AES file" placeholder="Choose encrypted AES file">
+    <label>QR File:</label>
+    <input type="file" id="qr_file" title="Select your QR file" placeholder="Choose QR file">
+    <input type="text" id="aes_override" placeholder="Override AES Key (optional)">
+    <button onclick="decryptMessage()">Decrypt</button>
+    <pre id="decrypt_result"></pre>
+  </div>
+
+</div>
+
+<p class="thanks">Thanks for using Secure QR Dashboard</p>
+<script src="script.js"></script>
 </body>
 </html>
